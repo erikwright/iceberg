@@ -33,11 +33,11 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 
 /** Adapts Parquet's synchronized column readers to Iceberg's record construction. */
-final class ColumnReaderPageStore implements PageReadStore {
+final class SynchronizingPageReadStore implements PageReadStore {
   private final PageReadStore delegate;
   private final ColumnReadStoreImpl columns;
 
-  ColumnReaderPageStore(PageReadStore delegate, MessageType schema, String createdBy) {
+  SynchronizingPageReadStore(PageReadStore delegate, MessageType schema, String createdBy) {
     this.delegate = delegate;
     this.columns = new ColumnReadStoreImpl(delegate, converters(schema), schema, createdBy);
   }
@@ -72,8 +72,9 @@ final class ColumnReaderPageStore implements PageReadStore {
   }
 
   private static GroupConverter converters(GroupType group) {
+    // ColumnReader getters supply values; Iceberg, not converter callbacks, constructs records.
     Converter[] children = new Converter[group.getFieldCount()];
-    for (int i = 0; i < children.length; i++) {
+    for (int i = 0; i < children.length; i += 1) {
       Type type = group.getType(i);
       children[i] =
           type.isPrimitive() ? new PrimitiveConverter() {} : converters(type.asGroupType());

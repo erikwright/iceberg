@@ -186,13 +186,15 @@ public class ParquetReader<T> extends CloseableGroup implements CloseableIterabl
 
         currentGroupRemaining = pages.getRowCount();
 
-        model.setPageSource(
-            pages.getRowIndexes().isPresent()
-                ? new ColumnReaderPageStore(
-                    pages,
-                    reader.getFileMetaData().getSchema(),
-                    reader.getFileMetaData().getCreatedBy())
-                : pages);
+        PageReadStore source = pages;
+        if (pages.getRowIndexes().isPresent()) {
+          source =
+              new SynchronizingPageReadStore(
+                  pages,
+                  reader.getFileMetaData().getSchema(),
+                  reader.getFileMetaData().getCreatedBy());
+        }
+        model.setPageSource(source);
 
         return true;
       }

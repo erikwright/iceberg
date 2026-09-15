@@ -90,18 +90,30 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
     }
   }
 
-  private final PageIterator<T> pageIterator;
+  private final String writerVersion;
+  private PageIterator<T> pageIterator;
   private ColumnReader synchronizedReader;
   private long remainingRows;
 
-  void setPageSource(ColumnReaderPageStore store) {
+  void setPageSource(SynchronizingPageReadStore store) {
     this.synchronizedReader = store.columnReader(desc);
     this.remainingRows = store.getRowCount();
+    // The inactive native decoder must not retain the previous row group's buffers/dictionary.
+    this.pageIterator = null;
+    this.pageSource = null;
+    this.dictionary = null;
+    this.triplesCount = 0L;
+    this.triplesRead = 0L;
+    this.advanceNextPageCount = 0L;
   }
 
   @Override
   public void setPageSource(PageReader source) {
     this.synchronizedReader = null;
+    this.remainingRows = 0L;
+    if (pageIterator == null) {
+      this.pageIterator = PageIterator.newIterator(desc, writerVersion);
+    }
     super.setPageSource(source);
   }
 
@@ -119,6 +131,7 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   private ColumnIterator(ColumnDescriptor desc, String writerVersion) {
     super(desc);
+    this.writerVersion = writerVersion;
     this.pageIterator = PageIterator.newIterator(desc, writerVersion);
   }
 

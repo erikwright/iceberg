@@ -19,6 +19,8 @@
 package org.apache.iceberg.parquet;
 
 import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.column.ColumnReader;
+import org.apache.parquet.column.page.PageReader;
 import org.apache.parquet.io.api.Binary;
 
 public abstract class ColumnIterator<T> extends BaseColumnIterator implements TripleIterator<T> {
@@ -89,6 +91,31 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
   }
 
   private final PageIterator<T> pageIterator;
+  private ColumnReader synchronizedReader;
+  private long remainingRows;
+
+  void setPageSource(ColumnReaderPageStore store) {
+    this.synchronizedReader = store.columnReader(desc);
+    this.remainingRows = store.getRowCount();
+  }
+
+  @Override
+  public void setPageSource(PageReader source) {
+    this.synchronizedReader = null;
+    super.setPageSource(source);
+  }
+
+  @Override
+  public boolean hasNext() {
+    return synchronizedReader == null ? super.hasNext() : remainingRows > 0;
+  }
+
+  private void consumeSynchronized() {
+    synchronizedReader.consume();
+    if (synchronizedReader.getCurrentRepetitionLevel() == 0) {
+      this.remainingRows -= 1;
+    }
+  }
 
   private ColumnIterator(ColumnDescriptor desc, String writerVersion) {
     super(desc);
@@ -97,18 +124,32 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   @Override
   public int currentDefinitionLevel() {
+    if (synchronizedReader != null) {
+      return synchronizedReader.getCurrentDefinitionLevel();
+    }
+
     advance();
     return pageIterator.currentDefinitionLevel();
   }
 
   @Override
   public int currentRepetitionLevel() {
+    if (synchronizedReader != null) {
+      return synchronizedReader.getCurrentRepetitionLevel();
+    }
+
     advance();
     return pageIterator.currentRepetitionLevel();
   }
 
   @Override
   public boolean nextBoolean() {
+    if (synchronizedReader != null) {
+      boolean value = synchronizedReader.getBoolean();
+      consumeSynchronized();
+      return value;
+    }
+
     this.triplesRead += 1;
     advance();
     return pageIterator.nextBoolean();
@@ -116,6 +157,12 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   @Override
   public int nextInteger() {
+    if (synchronizedReader != null) {
+      int value = synchronizedReader.getInteger();
+      consumeSynchronized();
+      return value;
+    }
+
     this.triplesRead += 1;
     advance();
     return pageIterator.nextInteger();
@@ -123,6 +170,12 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   @Override
   public long nextLong() {
+    if (synchronizedReader != null) {
+      long value = synchronizedReader.getLong();
+      consumeSynchronized();
+      return value;
+    }
+
     this.triplesRead += 1;
     advance();
     return pageIterator.nextLong();
@@ -130,6 +183,12 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   @Override
   public float nextFloat() {
+    if (synchronizedReader != null) {
+      float value = synchronizedReader.getFloat();
+      consumeSynchronized();
+      return value;
+    }
+
     this.triplesRead += 1;
     advance();
     return pageIterator.nextFloat();
@@ -137,6 +196,12 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   @Override
   public double nextDouble() {
+    if (synchronizedReader != null) {
+      double value = synchronizedReader.getDouble();
+      consumeSynchronized();
+      return value;
+    }
+
     this.triplesRead += 1;
     advance();
     return pageIterator.nextDouble();
@@ -144,6 +209,12 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   @Override
   public Binary nextBinary() {
+    if (synchronizedReader != null) {
+      Binary value = synchronizedReader.getBinary();
+      consumeSynchronized();
+      return value;
+    }
+
     this.triplesRead += 1;
     advance();
     return pageIterator.nextBinary();
@@ -151,6 +222,11 @@ public abstract class ColumnIterator<T> extends BaseColumnIterator implements Tr
 
   @Override
   public <N> N nextNull() {
+    if (synchronizedReader != null) {
+      consumeSynchronized();
+      return null;
+    }
+
     this.triplesRead += 1;
     advance();
     return pageIterator.nextNull();

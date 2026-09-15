@@ -499,7 +499,11 @@ public class ParquetValueReaders {
 
     @Override
     public void setPageSource(PageReadStore pageStore) {
-      column.setPageSource(pageStore.getPageReader(desc));
+      if (pageStore instanceof ColumnReaderPageStore) {
+        column.setPageSource((ColumnReaderPageStore) pageStore);
+      } else {
+        column.setPageSource(pageStore.getPageReader(desc));
+      }
     }
 
     @Override
